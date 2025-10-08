@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        PATH = "/usr/bin:${env.PATH}" // Maven accessible via /usr/bin
+        PATH = "/usr/bin:${env.PATH}" // Ajouter /usr/bin pour que mvn soit trouvé
     }
 
     stages {
@@ -14,27 +14,27 @@ pipeline {
 
         stage('Clean Project') {
             steps {
-                sh 'mvn clean'
+                sh '/usr/bin/mvn clean'
             }
         }
 
         stage('Compile Project') {
             steps {
-                sh 'mvn compile'
+                sh '/usr/bin/mvn compile'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sq1') {  // <- Nom du serveur SonarQube dans Jenkins
-                    sh 'mvn sonar:sonar -Dsonar.projectKey=Backend-CI-CD -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_AUTH_TOKEN -DskipTests'
+                withSonarQubeEnv('sq1') {
+                    sh '/usr/bin/mvn sonar:sonar -Dsonar.projectKey=Backend-CI-CD -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_AUTH_TOKEN -DskipTests'
                 }
             }
         }
 
         stage('Package JAR') {
             steps {
-                sh 'mvn package -DskipTests'
+                sh '/usr/bin/mvn package -DskipTests'
             }
         }
     }
