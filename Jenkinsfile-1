@@ -1,56 +1,55 @@
 pipeline {
     agent any
 
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '5'))
-        timestamps()
-    }
-
     environment {
-        // Nom de ton installation SonarQube dans Jenkins
-        SONAR = 'sq1'
+        MAVEN_HOME = '/opt/apache-maven-3.6.3'
+        PATH = "${MAVEN_HOME}/bin:${env.PATH}"
     }
 
     stages {
-
-        stage('Checkout') {
+        stage('Pull from Git') {
             steps {
-                checkout scm
+                git branch: 'main', url: 'https://github.com/samderouich2000/Backend-CI-CD.git'
             }
         }
 
-        stage('Set Permissions') {
+        stage('Clean Project') {
             steps {
-                // Rendre mvnw exécutable
-                sh 'chmod +x mvnw'
+                sh "${MAVEN_HOME}/bin/mvn clean"
             }
         }
 
-        stage('Build') {
+        stage('Compile Project') {
             steps {
-                // Compile le projet et crée les fichiers .class
-                sh './mvnw clean package'
+                sh "${MAVEN_HOME}/bin/mvn compile"
             }
         }
 
-        stage('SonarQube Scan') {
+        stage('SonarQube Analysis') {
+            environment {
+                // nom de la config SonarQube dans Jenkins
+                SONARQUBE = 'sq1'
+            }
             steps {
-                withSonarQubeEnv(installationName: "${SONAR}") {
-                    // Lance l'analyse SonarQube
-                    sh './mvnw sonar:sonar'
+                withSonarQubeEnv('sq1') {
+                    sh "${MAVEN_HOME}/bin/mvn sonar:sonar"
                 }
+            }
+        }
+
+        stage('Package JAR') {
+            steps {
+                sh "${MAVEN_HOME}/bin/mvn package"
             }
         }
     }
 
     post {
         success {
-            echo 'Build et scan SonarQube terminés avec succès ! ✅'
+            echo "Build, Analyse SonarQube et Package réussis ✅"
         }
         failure {
-            echo 'Le build ou le scan SonarQube a échoué ❌'
+            echo "Le build ou le scan SonarQube a échoué ❌"
         }
     }
 }
-
-
