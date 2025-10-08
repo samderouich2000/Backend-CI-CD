@@ -2,8 +2,8 @@ pipeline {
   agent any
 
   tools {
+    maven 'Maven3'
     jdk 'JDK17'
-    maven 'M2_HOME' // Nom de ton Maven configuré dans Jenkins
   }
 
   environment {
@@ -20,39 +20,27 @@ pipeline {
 
     stage('Clean') {
       steps {
-        script {
-          def mvnHome = tool 'M2_HOME'  // récupère le chemin d'installation de Maven
-          sh "${mvnHome}/bin/mvn -B clean"
-        }
+        sh 'mvn -B clean'
       }
     }
 
     stage('Compile') {
       steps {
-        script {
-          def mvnHome = tool 'M2_HOME'
-          sh "${mvnHome}/bin/mvn -B -DskipTests=true compile"
-        }
+        sh 'mvn -B -DskipTests=true compile'
       }
     }
 
     stage('Analyse SonarQube') {
       steps {
-        script {
-          def mvnHome = tool 'M2_HOME'
-          withSonarQubeEnv('sq1') {
-            sh "${mvnHome}/bin/mvn -B sonar:sonar -Dsonar.host.url=${SONAR_HOST} -Dsonar.login=${SONAR_TOKEN}"
-          }
+        withSonarQubeEnv('sq1') {
+          sh "mvn -B sonar:sonar -Dsonar.host.url=${SONAR_HOST} -Dsonar.login=${SONAR_TOKEN}"
         }
       }
     }
 
     stage('Package') {
       steps {
-        script {
-          def mvnHome = tool 'M2_HOME'
-          sh "${mvnHome}/bin/mvn -B -DskipTests=true package"
-        }
+        sh 'mvn -B -DskipTests=true package'
       }
     }
 
