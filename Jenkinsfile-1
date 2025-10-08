@@ -3,21 +3,52 @@ pipeline {
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '5'))
+        timestamps()
+    }
+
+    environment {
+        // Nom de ton installation SonarQube dans Jenkins
+        SONAR = 'sq1'
     }
 
     stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Set Permissions') {
             steps {
+                // Rendre mvnw exécutable
                 sh 'chmod +x mvnw'
             }
         }
 
-        stage('Scan') {
+        stage('Build') {
             steps {
-                withSonarQubeEnv('sq1') {
-                    sh './mvnw clean org.sonarsource.scanner.maven:sonar-maven-plugin:3.9.0.2155:sonar'
+                // Compile le projet et crée les fichiers .class
+                sh './mvnw clean package'
+            }
+        }
+
+        stage('SonarQube Scan') {
+            steps {
+                withSonarQubeEnv(installationName: "${SONAR}") {
+                    // Lance l'analyse SonarQube
+                    sh './mvnw sonar:sonar'
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'Build et scan SonarQube terminés avec succès ! ✅'
+        }
+        failure {
+            echo 'Le build ou le scan SonarQube a échoué ❌'
         }
     }
 }
