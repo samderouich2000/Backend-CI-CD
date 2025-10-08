@@ -3,12 +3,12 @@ pipeline {
 
   tools {
     jdk 'JDK17'
+    maven 'Maven3' // le nom de ton Maven dans Jenkins > Global Tool Configuration
   }
 
   environment {
     SONAR_TOKEN = credentials('jenkins-sonar')
     SONAR_HOST = 'http://192.168.33.10:9000'
-    PATH = "/usr/share/maven/bin:${env.PATH}"  // Ajout de Maven au PATH
   }
 
   stages {
@@ -20,27 +20,39 @@ pipeline {
 
     stage('Clean') {
       steps {
-        sh 'mvn -B clean'
+        script {
+          def mvnHome = tool 'Maven3'  // récupère le chemin d'installation de Maven
+          sh "${mvnHome}/bin/mvn -B clean"
+        }
       }
     }
 
     stage('Compile') {
       steps {
-        sh 'mvn -B -DskipTests=true compile'
+        script {
+          def mvnHome = tool 'Maven3'
+          sh "${mvnHome}/bin/mvn -B -DskipTests=true compile"
+        }
       }
     }
 
     stage('Analyse SonarQube') {
       steps {
-        withSonarQubeEnv('sq1') {
-          sh "mvn -B sonar:sonar -Dsonar.host.url=${SONAR_HOST} -Dsonar.login=${SONAR_TOKEN}"
+        script {
+          def mvnHome = tool 'Maven3'
+          withSonarQubeEnv('sq1') {
+            sh "${mvnHome}/bin/mvn -B sonar:sonar -Dsonar.host.url=${SONAR_HOST} -Dsonar.login=${SONAR_TOKEN}"
+          }
         }
       }
     }
 
     stage('Package') {
       steps {
-        sh 'mvn -B -DskipTests=true package'
+        script {
+          def mvnHome = tool 'Maven3'
+          sh "${mvnHome}/bin/mvn -B -DskipTests=true package"
+        }
       }
     }
 
