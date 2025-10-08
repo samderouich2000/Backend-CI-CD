@@ -1,50 +1,62 @@
 pipeline {
-    agent any
+  agent any
 
-    environment {
-        PATH = "/usr/bin:${env.PATH}" // Ajouter /usr/bin pour que mvn soit trouvé
+  tools {
+    maven 'Maven3'
+    jdk 'JDK17'
+  }
+
+  environment {
+    SONAR_TOKEN = credentials('jenkins-sonar')
+    SONAR_HOST = 'http://192.168.33.10:9000'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        git branch: 'main', url: 'https://github.com/samderouich2000/Backend-CI-CD.git'
+      }
     }
 
-    stages {
-        stage('Pull from Git') {
-            steps {
-                git branch: 'main', url: 'https://github.com/samderouich2000/Backend-CI-CD.git'
-            }
-        }
-
-        stage('Clean Project') {
-            steps {
-                sh '/usr/bin/mvn clean'
-            }
-        }
-
-        stage('Compile Project') {
-            steps {
-                sh '/usr/bin/mvn compile'
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('sq1') {
-                    sh '/usr/bin/mvn sonar:sonar -Dsonar.projectKey=Backend-CI-CD -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_AUTH_TOKEN -DskipTests'
-                }
-            }
-        }
-
-        stage('Package JAR') {
-            steps {
-                sh '/usr/bin/mvn package -DskipTests'
-            }
-        }
+    stage('Clean') {
+      steps {
+        sh 'mvn -B clean'
+      }
     }
 
-    post {
-        success {
-            echo '✅ Build terminé avec succès !'
-        }
-        failure {
-            echo '❌ Le build ou le scan SonarQube a échoué'
-        }
+    stage('Compile') {
+      steps {
+        sh 'mvn -B -DskipTests=true compile'
+      }
     }
+
+    stage('Analyse SonarQube') {
+      steps {
+        withSonarQubeEnv('sq1') {
+          sh "mvn -B sonar:sonar -Dsonar.host.url=${SONAR_HOST} -Dsonar.login=${SONAR_TOKEN}"
+        }
+      }
+    }
+
+    stage('Package') {
+      steps {
+        sh 'mvn -B -DskipTests=true package'
+      }
+    }
+
+    stage('Archive') {
+      steps {
+        archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Build terminé avec succès !"
+    }
+    failure {
+      echo "❌ Build échoué. Vérifie les logs Jenkins."
+    }
+  }
 }
