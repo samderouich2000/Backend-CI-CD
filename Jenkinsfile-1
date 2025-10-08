@@ -2,51 +2,49 @@ pipeline {
     agent any
 
     environment {
-        M2_HOME = "/opt/apache-maven-3.6.3"
-        PATH = "$M2_HOME/bin:$PATH"
-        SONARQUBE = "sq1" // nom de ton serveur SonarQube configuré dans Jenkins
+        PATH = "/usr/bin:${env.PATH}" // Maven accessible via /usr/bin
     }
 
     stages {
         stage('Pull from Git') {
             steps {
-                git url: 'https://github.com/samderouich2000/Backend-CI-CD.git', branch: 'main'
+                git branch: 'main', url: 'https://github.com/samderouich2000/Backend-CI-CD.git'
             }
         }
 
         stage('Clean Project') {
             steps {
-                sh "${M2_HOME}/bin/mvn clean"
+                sh 'mvn clean'
             }
         }
 
         stage('Compile Project') {
             steps {
-                sh "${M2_HOME}/bin/mvn compile"
+                sh 'mvn compile'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv(SONARQUBE) {
-                    sh "${M2_HOME}/bin/mvn sonar:sonar -DskipTests"
+                withSonarQubeEnv('sq1') {  // <- Nom du serveur SonarQube dans Jenkins
+                    sh 'mvn sonar:sonar -Dsonar.projectKey=Backend-CI-CD -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.login=$SONAR_AUTH_TOKEN -DskipTests'
                 }
             }
         }
 
         stage('Package JAR') {
             steps {
-                sh "${M2_HOME}/bin/mvn package -DskipTests"
+                sh 'mvn package -DskipTests'
             }
         }
     }
 
     post {
-        failure {
-            echo "Le build ou le scan SonarQube a échoué ❌"
-        }
         success {
-            echo "Build et analyse SonarQube réussis ✅"
+            echo '✅ Build terminé avec succès !'
+        }
+        failure {
+            echo '❌ Le build ou le scan SonarQube a échoué'
         }
     }
 }
