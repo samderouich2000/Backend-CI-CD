@@ -2,14 +2,12 @@ pipeline {
   agent any
 
   tools {
-    maven 'Maven3'
-    jdk 'JDK17'
+    maven 'Maven3'  // Make sure this name matches Jenkins Global Tool Configuration
+    jdk 'JDK17'     // Make sure this name matches Jenkins Global Tool Configuration
   }
 
   environment {
-    SONAR_TOKEN = credentials('jenkins-sonar')
     SONAR_HOST = 'http://192.168.33.10:9000'
-    DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds')
     DOCKER_IMAGE = 'samiraderouich/tp-projet'
     DOCKER_TAG = "${env.BUILD_ID}"
   }
@@ -33,10 +31,21 @@ pipeline {
       }
     }
 
+    stage('Test') {
+      steps {
+        sh 'mvn -B test'
+      }
+      post {
+        always {
+          junit 'target/surefire-reports/*.xml'
+        }
+      }
+    }
+
     stage('Analyse SonarQube') {
       steps {
-        withSonarQubeEnv('sq1') {
-          sh "mvn -B sonar:sonar -Dsonar.host.url=${SONAR_HOST} -Dsonar.login=${SONAR_TOKEN}"
+        withSonarQubeEnv('sq1') {  // Make sure 'sq1' matches Jenkins SonarQube server name
+          sh "mvn -B sonar:sonar"
         }
       }
     }
@@ -53,7 +62,6 @@ pipeline {
       }
     }
 
-    // ✅ NOUVEAU STAGE CD 1: Création de l'image Docker
     stage('Build Docker Image') {
       steps {
         script {
@@ -66,18 +74,17 @@ pipeline {
       }
     }
 
-    // ✅ NOUVEAU STAGE CD 2: Hébergement sur Docker Hub
     stage('Push to Docker Hub') {
       steps {
         script {
           echo "📤 Pushing image to Docker Hub..."
           withCredentials([usernamePassword(
-            credentialsId: 'dockerhub-credentials',
+            credentialsId: 'dockerhub-credentials',  // Fixed: consistent credential ID
             usernameVariable: 'DOCKER_USERNAME',
             passwordVariable: 'DOCKER_PASSWORD'
           )]) {
             sh """
-              docker login -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}
+              echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
               docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
               docker push ${DOCKER_IMAGE}:latest
             """
@@ -86,28 +93,27 @@ pipeline {
       }
     }
 
-    // ✅ NOUVEAU STAGE CD 3: Déploiement Kubernetes
     stage('Deploy to Kubernetes') {
       steps {
         script {
           echo "🚀 Déploiement sur Kubernetes..."
           
-          // Déployer MySQL
+          // Deploy MySQL
           sh 'kubectl apply -f mysql-secrets.yml'
           sh 'kubectl apply -f mysql-deployment.yml'
           
-          // Attendre que MySQL soit prêt
+          // Wait for MySQL to be ready
           sh '''
             kubectl wait --for=condition=ready pod -l app=mysql --timeout=300s
             sleep 10
           '''
           
-          // Déployer l'application
+          // Deploy the application
           sh 'kubectl apply -f app-deployment.yml'
           
-          // Vérifier le déploiement
+          // Verify deployment
           sh '''
-            echo "=== Vérification des déploiements ==="
+            echo "=== Vérification des déployements ==="
             kubectl get pods
             kubectl get services
             echo "=== Attente du démarrage de l'application ==="
@@ -129,7 +135,7 @@ pipeline {
       echo "❌ Build ou Déploiement échoué. Vérifie les logs Jenkins."
     }
     always {
-      // Nettoyage des credentials Docker
+      // Docker cleanup
       sh 'docker logout'
     }
   }
