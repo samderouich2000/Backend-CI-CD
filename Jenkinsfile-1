@@ -9,6 +9,9 @@ pipeline {
   environment {
     SONAR_TOKEN = credentials('jenkins-sonar')
     SONAR_HOST = 'http://192.168.33.10:9000'
+    DOCKERHUB_CREDENTIALS = credentials('Dockerhub-access')
+    DOCKER_IMAGE = 'samiraderouich/tp-projet'
+    DOCKER_TAG = "${env.BUILD_ID}"
   }
 
   stages {
@@ -49,14 +52,85 @@ pipeline {
         archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
       }
     }
+
+    // ✅ NOUVEAU STAGE CD 1: Création de l'image Docker
+    stage('Build Docker Image') {
+      steps {
+        script {
+          echo "🔨 Construction de l'image Docker..."
+          sh """
+            docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
+            docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
+          """
+        }
+      }
+    }
+
+    // ✅ NOUVEAU STAGE CD 2: Hébergement sur Docker Hub
+    stage('Push to Docker Hub') {
+      steps {
+        script {
+          echo "📤 Pushing image to Docker Hub..."
+          withCredentials([usernamePassword(
+            credentialsId: 'dockerhub-credentials',
+            usernameVariable: 'DOCKER_USERNAME',
+            passwordVariable: 'DOCKER_PASSWORD'
+          )]) {
+            sh """
+              docker login -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}
+              docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+              docker push ${DOCKER_IMAGE}:latest
+            """
+          }
+        }
+      }
+    }
+
+    // ✅ NOUVEAU STAGE CD 3: Déploiement Kubernetes
+    stage('Deploy to Kubernetes') {
+      steps {
+        script {
+          echo "🚀 Déploiement sur Kubernetes..."
+          
+          // Déployer MySQL
+          sh 'kubectl apply -f mysql-secrets.yml'
+          sh 'kubectl apply -f mysql-deployment.yml'
+          
+          // Attendre que MySQL soit prêt
+          sh '''
+            kubectl wait --for=condition=ready pod -l app=mysql --timeout=300s
+            sleep 10
+          '''
+          
+          // Déployer l'application
+          sh 'kubectl apply -f app-deployment.yml'
+          
+          // Vérifier le déploiement
+          sh '''
+            echo "=== Vérification des déploiements ==="
+            kubectl get pods
+            kubectl get services
+            echo "=== Attente du démarrage de l'application ==="
+            sleep 30
+            kubectl logs -l app=tp-projet --tail=10
+          '''
+        }
+      }
+    }
   }
 
   post {
     success {
-      echo "✅ Build terminé avec succès !"
+      echo "✅ Build et Déploiement terminés avec succès !"
+      echo "🌐 Application accessible sur: http://192.168.49.2:30089/tpProjet"
+      echo "🐳 Image Docker: ${DOCKER_IMAGE}:${DOCKER_TAG}"
     }
     failure {
-      echo "❌ Build échoué. Vérifie les logs Jenkins."
+      echo "❌ Build ou Déploiement échoué. Vérifie les logs Jenkins."
+    }
+    always {
+      // Nettoyage des credentials Docker
+      sh 'docker logout'
     }
   }
 }
