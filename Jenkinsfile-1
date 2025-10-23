@@ -2,20 +2,19 @@ pipeline {
   agent any
 
   tools {
-    maven 'Maven3'  // Make sure this name matches Jenkins Global Tool Configuration
-    jdk 'JDK17'     // Make sure this name matches Jenkins Global Tool Configuration
+    maven 'Maven3'
+    jdk 'JDK17'
   }
 
   environment {
+    SONAR_TOKEN = credentials('jenkins-sonar')
     SONAR_HOST = 'http://192.168.33.10:9000'
-    DOCKER_IMAGE = 'samiraderouich/tp-projet'
-    DOCKER_TAG = "${env.BUILD_ID}"
   }
 
   stages {
     stage('Checkout') {
       steps {
-        git branch: 'main', url: 'https://github.com/samderouich2000/Backend-CI-CD.git'
+        git branch: 'main', url: 'https://github.com/ines-jendoubi/Backend-CI-CD.git'
       }
     }
 
@@ -31,21 +30,10 @@ pipeline {
       }
     }
 
-    stage('Test') {
-      steps {
-        sh 'mvn -B test'
-      }
-      post {
-        always {
-          junit 'target/surefire-reports/*.xml'
-        }
-      }
-    }
-
     stage('Analyse SonarQube') {
       steps {
-        withSonarQubeEnv('sq1') {  // Make sure 'sq1' matches Jenkins SonarQube server name
-          sh "mvn -B sonar:sonar"
+        withSonarQubeEnv('sq1') {
+          sh "mvn -B sonar:sonar -Dsonar.host.url=${SONAR_HOST} -Dsonar.login=${SONAR_TOKEN}"
         }
       }
     }
@@ -61,82 +49,14 @@ pipeline {
         archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
       }
     }
-
-    stage('Build Docker Image') {
-      steps {
-        script {
-          echo "🔨 Construction de l'image Docker..."
-          sh """
-            docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-            docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
-          """
-        }
-      }
-    }
-
-    stage('Push to Docker Hub') {
-      steps {
-        script {
-          echo "📤 Pushing image to Docker Hub..."
-          withCredentials([usernamePassword(
-            credentialsId: 'dockerhub-credentials',  // Fixed: consistent credential ID
-            usernameVariable: 'DOCKER_USERNAME',
-            passwordVariable: 'DOCKER_PASSWORD'
-          )]) {
-            sh """
-              echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
-              docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-              docker push ${DOCKER_IMAGE}:latest
-            """
-          }
-        }
-      }
-    }
-
-    stage('Deploy to Kubernetes') {
-      steps {
-        script {
-          echo "🚀 Déploiement sur Kubernetes..."
-          
-          // Deploy MySQL
-          sh 'kubectl apply -f mysql-secrets.yml'
-          sh 'kubectl apply -f mysql-deployment.yml'
-          
-          // Wait for MySQL to be ready
-          sh '''
-            kubectl wait --for=condition=ready pod -l app=mysql --timeout=300s
-            sleep 10
-          '''
-          
-          // Deploy the application
-          sh 'kubectl apply -f app-deployment.yml'
-          
-          // Verify deployment
-          sh '''
-            echo "=== Vérification des déployements ==="
-            kubectl get pods
-            kubectl get services
-            echo "=== Attente du démarrage de l'application ==="
-            sleep 30
-            kubectl logs -l app=tp-projet --tail=10
-          '''
-        }
-      }
-    }
   }
 
   post {
     success {
-      echo "✅ Build et Déploiement terminés avec succès !"
-      echo "🌐 Application accessible sur: http://192.168.49.2:30089/tpProjet"
-      echo "🐳 Image Docker: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+      echo "✅ Build terminé avec succès !"
     }
     failure {
-      echo "❌ Build ou Déploiement échoué. Vérifie les logs Jenkins."
-    }
-    always {
-      // Docker cleanup
-      sh 'docker logout'
+      echo "❌ Build échoué. Vérifie les logs Jenkins."
     }
   }
 }
